@@ -1,9 +1,7 @@
-import { table } from "console";
+import fs from "fs";
 import { client } from "./mistral.js";
-import fs from "fs"
-import path from "path"
 
-const htmlExtractionPrompt = `
+export const htmlExtractionPrompt = `
   You will receive a JSON array of HTML table fragments. These fragments are NOT
   separate tables — they are consecutive page-chunks of ONE continuous table that
   was split apart by page breaks during OCR. Process them as a single logical table,
@@ -52,63 +50,67 @@ const htmlExtractionPrompt = `
   - Omit any key with no data for that service — never write null or an empty string
   - Preserve Nepali text and numerals exactly as written, do not transliterate or
     convert Devanagari numerals to Arabic numerals
-  - Return ONLY a valid JSON array. No explanation. No markdown code fences.
+  - Return ONLY a valid standard JSON array.Not JSON5 just JSON. No explanation. No markdown code fences.
   `;
 
-const pdfPath = path.join(process.cwd(), "/src", "pdf", "ird_citizen_charter.pdf")
-
-
-
-function encodePdf(pdfPath: string) {
+export function encodePdf(pdfPath: string) {
   const pdfBuffer = fs.readFileSync(pdfPath);
   const base64Pdf = pdfBuffer.toString("base64");
   return `data:application/pdf;base64,${base64Pdf}`;
 }
 
-const ocrResponse = await client.ocr.process({
-  model: "mistral-ocr-latest",
-  document: {
-    type: "document_url",
-    documentUrl: encodePdf(pdfPath)
-  },
-  tableFormat: "html"
-})
-
-function getOcrTables() {
-    return JSON.stringify(ocrResponse.pages.flatMap((page) => page?.tables ?? []));
+/**
+ * OCR a PDF into HTML table fragments. This is the expensive, cacheable step —
+ * call it once per source and persist the result rather than re-paying for it.
+ */
+export async function ocrPdf(pdfPath: string) {
+  const ocrResponse = await client.ocr.process({
+    model: "mistral-ocr-latest",
+    document: {
+      type: "document_url",
+      documentUrl: encodePdf(pdfPath),
+    },
+    tableFormat: "html",
+  });
+  return ocrResponse;
 }
 
-const ocrResult = getOcrTables();
-console.log(ocrResult)
+/** Flatten an OCR response into the single JSON array of HTML tables the prompt expects. */
+export function getOcrTables(ocrResponse: Awaited<ReturnType<typeof ocrPdf>>) {
+  return JSON.stringify(ocrResponse.pages.flatMap((page) => page?.tables ?? []));
+}
 
-async function extractFromHtml(ocrResult: string, htmlExtractionPrompt: string) {
-  const chatResponseHtml = await client.chat.complete({
+/**
+ * Ask the LLM to reconstruct + extract the already-OCR'd tables.
+ * Returns the raw parsed JSON — hand it to parseExtraction() for validation.
+ */
+export async function extractServicesFromTables(
+  tablesJson: string,
+  prompt: string = htmlExtractionPrompt,
+) {
+  const chatResponse = await client.chat.complete({
     model: "mistral-medium-latest",
     messages: [
       {
         role: "user",
-        content: [{
-          type: "text",
-          text: ocrResult
-        },
-          {
-            type: "text",
-            text: htmlExtractionPrompt
-        }]
-    }
+        content: [
+          { type: "text", text: tablesJson },
+          { type: "text", text: prompt },
+        ],
+      },
     ],
-    responseFormat: {type: "json_object"}
-  })
-  const htmlContent = chatResponseHtml.choices[0]?.message?.content || [];
-  try {
-    if (typeof htmlContent === "string") {
-      return console.log(JSON.parse(htmlContent))
-    }
-  } catch (error) {
-    console.error(error, htmlContent);
-    return htmlContent
-  }
-  return htmlContent;
+    responseFormat: { type: "json_object" },
+  });
 
+  const content = chatResponse.choices[0]?.message?.content ?? "";
+  if (typeof content !== "string") return content;
+
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    // Hand the unparsed string back so parseExtraction() can report it as a reject
+    // instead of losing the response entirely.
+    console.error("PDF extraction returned invalid JSON:", error);
+    return content;
+  }
 }
-extractFromHtml(ocrResult, htmlExtractionPrompt)

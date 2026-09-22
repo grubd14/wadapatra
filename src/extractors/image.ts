@@ -1,8 +1,6 @@
 //image extraction using mistral AI
 import fs from "fs"; //file system module of node
-import path from "path";
 import { client } from "../extractors/mistral.js";
-
 
 //extraction prompt
 const extractionPrompt = `
@@ -30,7 +28,7 @@ const extractionPrompt = `
     only fill this if the document draws a clear, separate distinction from contact_person
   - grievance_officer: ONLY the specific role for handling formal complaints/grievances about
     the service (e.g. "उजुरी सुन्ने अधिकारी", "Grievance Officer", "Complaint Officer").
-    Do not put general "contact" or "queries" columns here — those belong in contact_person.
+    Do not put general "contact" or "queries" columns here — those belong to contact_person.
   - documents_required: any list of required documents, papers, or forms needed for the service
   - notes: anything relevant that doesn't fit a field above — footnotes, asterisked conditions,
     special instructions, or a column you genuinely can't place elsewhere (in that case, prefix
@@ -39,8 +37,8 @@ const extractionPrompt = `
   MAPPING RULES:
   - Each distinct service/row in the table becomes one JSON object
   - Look at the actual column header AND the kind of data in the cell together — a column
-    literally labeled "Contact Room" is a location, not a person, even though it contains
-    the word "Contact"
+    literally labeled "Contact Room" is a location, not a person, even if it contains the
+    word "Contact"
   - If a cell is merged across multiple rows, repeat its value for each affected row
   - If a field has no data for a given service, omit that key entirely — never write null,
     "N/A", or an empty string
@@ -48,11 +46,9 @@ const extractionPrompt = `
   - If you genuinely cannot confidently map a column to any field above, put its content in
     "notes" rather than forcing it into the wrong field
 
-  Return ONLY a valid JSON array. No explanation. No markdown code fences.
+  Return ONLY a valid standard JSON array. Not JSON5, just strict JSON. No comments, no trailing
+  commas, no unquoted keys, no single-quoted strings. No explanation. No markdown code fences.
   `;
-
-
-const imagePath = path.join(process.cwd(), "/src", "images", "pokhara_uni.png");
 
 //encode the image to base64
 function encodeImage(imagePath: string) {
@@ -61,7 +57,11 @@ function encodeImage(imagePath: string) {
   return `data:image/png;base64,${base64Image}`;
 }
 
-async function extractFromImage(imgSource: string, extractionPrompt: string) {
+/**
+ * Extract services from a local image file.
+ * Returns the raw parsed JSON — hand it to parseExtraction() for validation.
+ */
+export async function extractFromImage(imagePath: string) {
   const response = await client.chat.complete({
     model: "mistral-medium-latest",
     messages: [
@@ -69,25 +69,24 @@ async function extractFromImage(imgSource: string, extractionPrompt: string) {
         role: "user",
         content: [
           { type: "text", text: extractionPrompt },
-          { type: "image_url", imageUrl: imgSource },
+          { type: "image_url", imageUrl: encodeImage(imagePath) },
         ],
       },
     ],
-    responseFormat: { type: "json_object" },
+    responseFormat: {
+      type: "json_object",
+    },
   });
 
-  const content = response.choices?.[0]?.message?.content || [];
-  if (typeof content === "string") {
-    try {
-      return console.log(JSON.parse(content));
-    } catch (err) {
-      console.log("Response is not a valid JSON:", content);
-      return content;
-    }
+  const content = response.choices?.[0]?.message?.content ?? "";
+  if (typeof content !== "string") return content;
+
+  try {
+    return JSON.parse(content);
+  } catch (err) {
+    // Hand the unparsed string back so parseExtraction() can report it as a reject
+    // instead of losing the response entirely.
+    console.error("Image extraction returned invalid JSON:", err);
+    return content;
   }
-  return content;
 }
-
-const localImageBase64 = encodeImage(imagePath);
-
-extractFromImage(localImageBase64, extractionPrompt);
