@@ -1,39 +1,23 @@
-import { fastify, type FastifyPluginAsync } from "fastify";
-import { db } from "../db/index.js";
-import { organizations } from "../db/schema.js";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { createOrgBody, createOrganization, listOrganization, orgList, selectOrg } from "../services/organizations.js";
 
-export const orgRoutes: FastifyPluginAsync = async (fastify) => {
+
+export const orgRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post('/', {
     schema: {
-      body: {
-        type: 'object',
-        required: ['name_np'],
-        properties: {
-          name_np: {type: 'string'},
-          name_en: { type: 'string' },
-          type: { type: 'string' },
-          district: { type: 'string' },
-          province: { type: 'string' },
-          website: {type: 'string'}
-        }
-      }
-    }
+      body: createOrgBody,
+      response: {201: selectOrg},
+    },
   }, async (request, response) => {
-    const body = request.body as {
-      name_np: string
-      name_en: string
-      type?: string
-      district: string
-      province?: string
-      website: string
-    }
-
-    const [org] = await db.insert(organizations).values(body).returning()
+    const org = await createOrganization(request.body)
     return response.code(201).send(org)
   })
 
-  fastify.get('/', async (request, response) => {
-    const rows = await db.select().from(organizations)
-    return response.send(rows)
+  fastify.get('/', {
+    schema: {
+      response: {200:orgList}
+    },
+  }, async (request, response) => {
+    return response.send(await listOrganization())
   })
 }
