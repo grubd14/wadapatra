@@ -19,8 +19,8 @@ export const orgList = selectOrg.array()
 
 export type CreateOrgInput = z.infer<typeof createOrgBody>
 
-export async function createOrganization(input: CreateOrgInput) {
-  const [org] = await db.insert(organizations).values(input).returning()
+export async function createOrganization(organizations_input: CreateOrgInput) {
+  const [org] = await db.insert(organizations).values(organizations_input).returning()
   if (!org) throw new Error("insert into organizations returned no row")
   return org
 }
