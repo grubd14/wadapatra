@@ -1,9 +1,9 @@
-import { createSchemaFactory } from "drizzle-orm/zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-orm/zod";
 import { db } from "../db/index.js";
 import { organizations } from "../db/schema.js";
 import {z} from "zod";
 
-const { createInsertSchema, createSelectSchema } = createSchemaFactory()
+// const { createInsertSchema, createSelectSchema } = createSchemaFactory()
 
 export const createOrgBody = createInsertSchema(organizations).pick({
   name_en: true,

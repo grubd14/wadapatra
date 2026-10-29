@@ -1,34 +1,37 @@
-import Fastify  from "fastify";
-import 'dotenv/config';
+import Fastify from "fastify";
+import "dotenv/config";
 import { orgRoutes } from "./routes/organizations.js";
 import { uploadRoutes } from "./routes/upload.js";
-import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
+import multipart from "@fastify/multipart";
 
 // You can specify any property from the node-postgres connection options
-// const db = drizzle({ 
-//   connection: { 
+// const db = drizzle({
+//   connection: {
 //     connectionString: process.env.DATABASE_URL!,
 //   }
 // });
 
-
 // const rows = await db.select().from(organizations)
 // console.log(rows)
 
+const fastify = Fastify({ logger: true });
 
+fastify.setValidatorCompiler(validatorCompiler);
+fastify.setSerializerCompiler(serializerCompiler);
 
-const fastify = Fastify({logger: true})
+fastify.register(multipart, {
+  limits: { fileSize: 50 * 1024 * 1024, files: 5 },
+});
+fastify.register(orgRoutes, { prefix: "/orgs" });
+fastify.register(uploadRoutes, { prefix: "/uploads" });
 
-fastify.setValidatorCompiler(validatorCompiler)
-fastify.setSerializerCompiler(serializerCompiler)
-  
-fastify.register(orgRoutes, {prefix: '/orgs'})
-fastify.register(uploadRoutes, {prefix: '/uploads'})
-
-
-fastify.listen({ port: 3000, host: '0.0.0.0' }, (err) => {
+fastify.listen({ port: 3000, host: "0.0.0.0" }, (err) => {
   if (err) {
-    fastify.log.error(err)
-    process.exit(1)
+    fastify.log.error(err);
+    process.exit(1);
   }
-})
+});
