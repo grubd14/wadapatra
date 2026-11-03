@@ -1,14 +1,12 @@
-import { createInsertSchema, createSelectSchema } from "drizzle-orm/zod";
+import { createInsertSchema } from "drizzle-orm/zod";
 import { z } from "zod";
 import { services } from "../db/schema.js";
-import { extractFromImage } from "../extractors/image.js";
+import { extractFromImage } from "../extractors/image_ocr.js";
 import { detectSourceType, saveUpload } from "./upload.js";
-import { Result } from "pg";
 import {
-  extractServicesFromTables,
-  getOcrTables,
+  extractServicesFromMarkDownTables,
   ocrPdf,
-} from "../extractors/pdf.js";
+} from "../extractors/local_pdf_ocr.js";
 
 //zod validation schema based on drizzle table
 export const rawServiceSchema = createInsertSchema(services)
@@ -52,7 +50,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+
 export function parseExtraction(input: unknown): ExtractionResult {
+  if(Array.isArray(input)) input = { services: input };
   //containers for valid and invalid services
   const services: ExtractionResult["services"] = [];
   const rejected: ExtractionResult["rejected"] = [];
@@ -115,12 +115,13 @@ export async function processUpload(
   //ternary operator to store extraction value
   const raw =
     detectSourceType(filename) === "pdf"
-      ? await extractServicesFromTables(
-          getOcrTables(await ocrPdf(savedPath.file_path)),
+      ? await extractServicesFromMarkDownTables(
+          await ocrPdf(savedPath.file_path),
         )
       : await extractFromImage(savedPath.file_path);
 
   const results = parseExtraction(raw);
+  console.log(results);
   return {
     savedPath,
     results,

@@ -1,9 +1,9 @@
 //image extraction using mistral AI
 import fs from "fs"; //file system module of node
-import { client } from "../extractors/mistral.js";
+import { client } from "./genai.js";
 
 //extraction prompt
-const extractionPrompt = `
+const imageExtractionPrompt = `
   You are extracting data from a government citizens charter document. It may be
   written in Nepali, English, or a mix of both, and every department uses different
   column headers — do not rely on matching exact words. Instead, understand what each
@@ -35,7 +35,7 @@ const extractionPrompt = `
     it with the original column header so nothing is lost, e.g. "Note: ...")
 
   MAPPING RULES:
-  - Each distinct service/row in the table becomes one JSON object
+  - Each distinct service/row in the table becomes one object in the services array
   - Look at the actual column header AND the kind of data in the cell together — a column
     literally labeled "Contact Room" is a location, not a person, even if it contains the
     word "Contact"
@@ -45,16 +45,21 @@ const extractionPrompt = `
   - Preserve fee/currency values exactly as written, do not reformat or convert them
   - If you genuinely cannot confidently map a column to any field above, put its content in
     "notes" rather than forcing it into the wrong field
-
-  Return ONLY a valid standard JSON array. Not JSON5, just strict JSON. No comments, no trailing
-  commas, no unquoted keys, no single-quoted strings. No explanation. No markdown code fences.
+    
+    OUTPUT FORMAT:
+    Return a single JSON object of exactly this shape:
+    {"services": [ { ...one object per service... } ]}
+    Use only the field names listed above as keys. If the image contains no services,
+    return {"services": []}. Return ONLY strict JSON — not JSON5, no comments, no trailing
+    commas, no unquoted keys, no single-quoted strings. No explanation. No markdown code fences.
   `;
 
 //encode the image to base64
 function encodeImage(imagePath: string) {
   const imageBuffer = fs.readFileSync(imagePath);
   const base64Image = imageBuffer.toString("base64");
-  return `data:image/png;base64,${base64Image}`;
+  return base64Image
+  // return `data:image/png;base64,${base64Image}`;
 }
 
 /**
@@ -62,24 +67,21 @@ function encodeImage(imagePath: string) {
  * Returns the raw parsed JSON — hand it to parseExtraction() for validation.
  */
 export async function extractFromImage(imagePath: string) {
-  const response = await client.chat.complete({
-    model: "mistral-medium-latest",
-    messages: [
+  const response = await client.models.generateContent({
+    model: "gemini-3.5-flash-lite",
+    contents: [
+      { text: imageExtractionPrompt },
       {
-        role: "user",
-        content: [
-          { type: "text", text: extractionPrompt },
-          { type: "image_url", imageUrl: encodeImage(imagePath) },
-        ],
+        inlineData: {
+          mimeType: "image/png",
+          data: encodeImage(imagePath),
+        },
       },
     ],
-    responseFormat: {
-      type: "json_object",
-    },
+    config: { responseMimeType: "application/json" },
   });
 
-  const content = response.choices?.[0]?.message?.content ?? "";
-  if (typeof content !== "string") return content;
+  const content = response.text ?? "";
 
   try {
     return JSON.parse(content);
