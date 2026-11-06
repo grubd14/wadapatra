@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import "dotenv/config";
-import { orgRoutes } from "./routes/organizations.js";
-import { uploadRoutes } from "./routes/upload.js";
+import { orgRoutes } from "./routes/org-routes.js";
+import { uploadRoutes } from "./routes/upload-routes.js";
 import {
   serializerCompiler,
   validatorCompiler,

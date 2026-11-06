@@ -1,4 +1,4 @@
-import { client } from "./genai.js";
+import { client } from "./gemini-client.js";
 import fs from "fs";
 
 export const htmlExtractionPrompt = `

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { createUploadBody, detectSourceType } from "../services/upload.js";
+import { createUploadBody, detectSourceType } from "../services/upload-service.js";
 import { z } from "zod";
-import { processUpload } from "../services/org_services.js";
+import { processUpload } from "../services/charter-service.js";
 
 const selectUpload = z.object({
   id: z.string(),
@@ -14,7 +14,7 @@ const errorSchema = z.object({
 });
 
 const extractionResponse = z.object({
-  savedPath: selectUpload,
+  saved: selectUpload,
   services: z.array(
     z.object({
       raw: z.unknown(),
@@ -74,7 +74,7 @@ export const uploadRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return response.code(415).send({ error: "unsupported filetype" });
       }
 
-      const { savedPath, results } = await processUpload(
+      const { saved, results } = await processUpload(
         parsed.data.org_id,
         file.buffer,
         file.filename,
@@ -82,7 +82,7 @@ export const uploadRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // request.log.info({services: results.services, rejected:results.rejected})
       return response.code(201).send({
-        savedPath,
+        saved,
         services: results.services,
         rejected: results.rejected,
       });

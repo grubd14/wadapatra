@@ -1,6 +1,6 @@
 //image extraction using mistral AI
 import fs from "fs"; //file system module of node
-import { client } from "./genai.js";
+import { client } from "./gemini-client.js";
 
 //extraction prompt
 const imageExtractionPrompt = `

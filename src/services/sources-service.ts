@@ -18,8 +18,8 @@ export const sourcesList = selectSources.array()
 
 export type CreateSourceInput = z.infer<typeof createSourceBody>
 
-export async function createSource(sources_input: CreateSourceInput) {
-  const [sources] = await db.insert(charter_sources).values(sources_input).returning()
+export async function createSource(sourcesInput: CreateSourceInput) {
+  const [sources] = await db.insert(charter_sources).values(sourcesInput).returning()
   if (!sources) throw new Error("insert into charter_sources returned no row")
 }
 

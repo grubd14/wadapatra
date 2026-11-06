@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { createOrgBody, createOrganization, listOrganization, orgList, selectOrg } from "../services/organizations.js";
+import { createOrgBody, createOrganization, listOrganization, orgList, selectOrg } from "../services/org-service.js";
 
 
 export const orgRoutes: FastifyPluginAsyncZod = async (fastify) => {

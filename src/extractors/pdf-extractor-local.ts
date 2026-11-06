@@ -1,5 +1,5 @@
 import fs from "fs";
-import { client } from "./genai.js";
+import { client } from "./gemini-client.js";
 import LiteParse from "@llamaindex/liteparse";
 
 const markdownExtractionPrompt = `

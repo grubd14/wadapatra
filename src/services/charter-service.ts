@@ -1,33 +1,33 @@
 import { createInsertSchema } from "drizzle-orm/zod";
 import { z } from "zod";
 import { services } from "../db/schema.js";
-import { extractFromImage } from "../extractors/image_ocr.js";
-import { detectSourceType, saveUpload } from "./upload.js";
+import { extractFromImage } from "../extractors/image-extractor.js";
+import { detectSourceType, saveUpload } from "./upload-service.js";
 import {
   extractServicesFromMarkDownTables,
   ocrPdf,
-} from "../extractors/local_pdf_ocr.js";
+} from "../extractors/pdf-extractor-local.js";
+import { db } from "../db/index.js";
 
 //zod validation schema based on drizzle table
-export const rawServiceSchema = createInsertSchema(services)
-  .pick({
-    section: true,
-    service_name_np: true,
-    service_name_en: true,
-    hours: true,
-    fee_amount: true,
-    fee_notes: true,
-    location: true,
-    contact_person: true,
-    contact_phone: true,
-    responsible_officer: true,
-    grievance_officer: true,
-    documents_required: true,
-    notes: true,
-    raw_json: true,
-    review_status: true,
-  })
-  .strict();
+export const rawServiceSchema = createInsertSchema(services).pick({
+  section: true,
+  service_name_np: true,
+  service_name_en: true,
+  hours: true,
+  fee_amount: true,
+  fee_notes: true,
+  location: true,
+  contact_person: true,
+  contact_phone: true,
+  responsible_officer: true,
+  grievance_officer: true,
+  documents_required: true,
+  notes: true,
+  raw_json: true,
+  review_status: true,
+});
+// .strict();
 
 //infering of zod schema
 export type RawService = z.infer<typeof rawServiceSchema>;
@@ -50,9 +50,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-
 export function parseExtraction(input: unknown): ExtractionResult {
-  if(Array.isArray(input)) input = { services: input };
+  if (Array.isArray(input)) input = { services: input };
   //containers for valid and invalid services
   const services: ExtractionResult["services"] = [];
   const rejected: ExtractionResult["rejected"] = [];
@@ -109,21 +108,45 @@ export async function processUpload(
   buffer: Buffer,
   filename: string,
 ) {
-  const savedPath = await saveUpload({ orgId, buffer, filename });
+  const saved = await saveUpload({ orgId, buffer, filename });
 
   //condition ? true : false
   //ternary operator to store extraction value
   const raw =
     detectSourceType(filename) === "pdf"
       ? await extractServicesFromMarkDownTables(
-          await ocrPdf(savedPath.file_path),
+          await ocrPdf(saved.file_path),
         )
-      : await extractFromImage(savedPath.file_path);
+      : await extractFromImage(saved.file_path);
 
   const results = parseExtraction(raw);
+  await createCharterServices(orgId, saved.id,results.services)
   console.log(results);
   return {
-    savedPath,
+    saved,
     results,
   };
+}
+
+
+
+/**
+ * create service entrie in the database, by passing orgId, sourceId
+ * and merging them with each extracted service
+*/
+export async function createCharterServices(
+  orgId: string,
+  sourceId: string,
+  servicesInput: ExtractionResult["services"],
+) {
+  if (servicesInput.length === 0) return [];
+  const [charter_services] = await db.insert(services).values(
+    servicesInput.map(({ raw, service }) => ({
+      ...service,
+      org_id: orgId,
+      source_id: sourceId,
+      raw_json: raw,
+    })),
+  ).returning()
+  return charter_services
 }
